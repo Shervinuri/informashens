@@ -1,19 +1,25 @@
 /**
- * iNFORMA☬SHΞN™ Core v3
+ * LLM Chat Application Template
  *
- * This worker serves the custom iNFORMA☬SHΞN UI and provides a non-streaming
- * backend API to connect to Cloudflare's Workers AI.
- * This version uses the stable Llama-3 model to ensure reliability.
+ * A simple chat application using Cloudflare Workers AI.
+ * This template demonstrates how to implement an LLM-powered chat interface with
+ * streaming responses using Server-Sent Events (SSE).
+ *
+ * @license MIT
  */
 import { Env, ChatMessage } from "./types";
 
-// The model we'll use for the AI responses.
-// We are reverting to the stable and reliable Llama 3 model.
+// Model ID for Workers AI model
+// https://developers.cloudflare.com/workers-ai/models/
 const MODEL_ID = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+
+// Default system prompt
+const SYSTEM_PROMPT =
+  "You are a helpful, friendly assistant. Provide concise and accurate responses.";
 
 export default {
   /**
-   * Main request handler for the Worker.
+   * Main request handler for the Worker
    */
   async fetch(
     request: Request,
@@ -22,52 +28,72 @@ export default {
   ): Promise<Response> {
     const url = new URL(request.url);
 
-    // Route for our custom AI API endpoint
-    if (url.pathname === "/api/ai") {
-      if (request.method === "POST") {
-        return handleApiRequest(request, env);
-      }
-      return new Response("Method Not Allowed", { status: 405 });
+    // Handle static assets (frontend)
+    if (url.pathname === "/" || !url.pathname.startsWith("/api/")) {
+      return env.ASSETS.fetch(request);
     }
 
-    // For any other path, serve the static assets (your index.html).
-    return env.ASSETS.fetch(request);
+    // API Routes
+    if (url.pathname === "/api/chat") {
+      // Handle POST requests for chat
+      if (request.method === "POST") {
+        return handleChatRequest(request, env);
+      }
+
+      // Method not allowed for other request types
+      return new Response("Method not allowed", { status: 405 });
+    }
+
+    // Handle 404 for unmatched routes
+    return new Response("Not found", { status: 404 });
   },
 } satisfies ExportedHandler<Env>;
 
 /**
- * Handles the POST request to the /api/ai endpoint.
+ * Handles chat API requests
  */
-async function handleApiRequest(
+async function handleChatRequest(
   request: Request,
   env: Env,
 ): Promise<Response> {
   try {
-    const { messages } = (await request.json()) as { messages: ChatMessage[] };
+    // Parse JSON request body
+    const { messages = [] } = (await request.json()) as {
+      messages: ChatMessage[];
+    };
 
-    if (!messages) {
-      return new Response(JSON.stringify({ error: "No messages provided" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+    // Add system prompt if not present
+    if (!messages.some((msg) => msg.role === "system")) {
+      messages.unshift({ role: "system", content: SYSTEM_PROMPT });
     }
 
-    // Call the Workers AI model.
-    const aiResponse = await env.AI.run(MODEL_ID, {
-      messages,
-    });
+    const response = await env.AI.run(
+      MODEL_ID,
+      {
+        messages,
+        max_tokens: 1024,
+      },
+      {
+        returnRawResponse: true,
+        // Uncomment to use AI Gateway
+        // gateway: {
+        //   id: "YOUR_GATEWAY_ID", // Replace with your AI Gateway ID
+        //   skipCache: false,      // Set to true to bypass cache
+        //   cacheTtl: 3600,        // Cache time-to-live in seconds
+        // },
+      },
+    );
 
-    // Send the complete response back to your UI.
-    return new Response(JSON.stringify(aiResponse), {
-      headers: { "Content-Type": "application/json" },
-    });
-
+    // Return streaming response
+    return response;
   } catch (error) {
-    console.error("Error in AI API request:", error);
-    return new Response(JSON.stringify({ error: "Failed to process AI request" }), {
+    console.error("Error processing chat request:", error);
+    return new Response(
+      JSON.stringify({ error: "Failed to process request" }),
+      {
         status: 500,
-        headers: { "Content-Type": "application/json" },
-      }
+        headers: { "content-type": "application/json" },
+      },
     );
   }
 }
