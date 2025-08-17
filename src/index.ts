@@ -1,20 +1,19 @@
 /**
- * iNFORMA☬SHΞN™ Core v2
+ * iNFORMA☬SHΞN™ Core v3
  *
  * This worker serves the custom iNFORMA☬SHΞN UI and provides a non-streaming
- * backend API to connect to Cloudflare's Workers AI using Google's Gemma model.
- * It replaces the default streaming template logic.
+ * backend API to connect to Cloudflare's Workers AI.
+ * This version uses the stable Llama-3 model to ensure reliability.
  */
 import { Env, ChatMessage } from "./types";
 
 // The model we'll use for the AI responses.
-// @cf/google/gemma-7-b-it-lora is a powerful and free model available on Cloudflare.
-const MODEL_ID = "@cf/google/gemma-7b-it";
+// We are reverting to the stable and reliable Llama 3 model.
+const MODEL_ID = "@cf/meta/llama-3-8b-instruct";
 
 export default {
   /**
    * Main request handler for the Worker.
-   * It serves the static frontend and handles API requests.
    */
   async fetch(
     request: Request,
@@ -24,7 +23,6 @@ export default {
     const url = new URL(request.url);
 
     // Route for our custom AI API endpoint
-    // Your frontend JavaScript calls this specific endpoint.
     if (url.pathname === "/api/ai") {
       if (request.method === "POST") {
         return handleApiRequest(request, env);
@@ -33,21 +31,18 @@ export default {
     }
 
     // For any other path, serve the static assets (your index.html).
-    // 'ASSETS' is the binding to the Pages static content.
     return env.ASSETS.fetch(request);
   },
 } satisfies ExportedHandler<Env>;
 
 /**
  * Handles the POST request to the /api/ai endpoint.
- * This function is NON-STREAMING and returns a complete JSON response.
  */
 async function handleApiRequest(
   request: Request,
   env: Env,
 ): Promise<Response> {
   try {
-    // 1. Get the message history from the user's request.
     const { messages } = (await request.json()) as { messages: ChatMessage[] };
 
     if (!messages) {
@@ -57,14 +52,12 @@ async function handleApiRequest(
       });
     }
 
-    // 2. Call the Workers AI model.
-    // We are not using streaming here, so we await the full response.
+    // Call the Workers AI model.
     const aiResponse = await env.AI.run(MODEL_ID, {
       messages,
     });
 
-    // 3. Send the complete response back to your UI.
-    // Your frontend code expects a JSON object with a 'response' property.
+    // Send the complete response back to your UI.
     return new Response(JSON.stringify(aiResponse), {
       headers: { "Content-Type": "application/json" },
     });
