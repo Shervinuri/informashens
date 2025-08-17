@@ -9,7 +9,7 @@ import { Env, ChatMessage } from "./types";
 
 // The model we'll use for the AI responses.
 // We are reverting to the stable and reliable Llama 3 model.
-const MODEL_ID = "@cf/meta/llama-3-8b-instruct";
+const MODEL_ID = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
 export default {
   /**
